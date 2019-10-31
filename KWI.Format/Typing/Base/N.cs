@@ -20,6 +20,8 @@ namespace KWI.Format.Typing.Base
                 Value = BitConverter.ToUInt16(bytes.Reverse().ToArray());
             else if (len == 4)
                 Value = BitConverter.ToUInt32(bytes.Reverse().ToArray());
+            else if (len == 1)
+                Value = bytes[0];
 
             IsNull = bytes.All(b => b == 0xff);
         }

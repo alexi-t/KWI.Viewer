@@ -11,16 +11,10 @@ namespace KWI.Format.Reader
 {
     public class DVDReader
     {
-        private readonly string _drive;
-
-        public DVDReader(string driveLetter)
-        {
-            _drive = driveLetter;
-        }
 
         public INode Read()
         {
-            using (var allDataFile = File.OpenRead($"{_drive}:\\ALLDATA.KWI"))
+            using (var allDataFile = File.OpenRead($"{KWIContext.DriveLetter}:\\ALLDATA.KWI"))
             using (var br = new BinaryReader(allDataFile))
             {
                 var allDataFrame = new AllDataFrame();

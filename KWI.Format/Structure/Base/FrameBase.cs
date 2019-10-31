@@ -7,7 +7,7 @@ namespace KWI.Format.Structure.Base
 {
     public abstract class FrameBase : RecordBase
     {
-        public char DriveLetter { get; set; } = 'J';
+        public char DriveLetter => KWIContext.DriveLetter;
         public FrameBase() : base(null) { }
 
         public abstract string FileName { get; }

@@ -84,14 +84,14 @@ namespace KWI.Viewer.MapRender
 
         public void SetupTransform(GeoCord viewportCenterLong, GeoCord viewportCenterLat, GeoCord viewportWidth, GeoCord viewportHeight)
         {
-            var pixelToEightsRatioX = _parcelWidth.GetAsEightsS() / _parcelScreenSize;
-            var pixelToEightsRatioY = _parcelHeight.GetAsEightsS() / _parcelScreenSize;
+            var pixelToEightsRatioX = _parcelWidth.GetAsEightSeconds() / _parcelScreenSize;
+            var pixelToEightsRatioY = _parcelHeight.GetAsEightSeconds() / _parcelScreenSize;
 
             var offsetFromCenterX = viewportWidth.Divide(2) + _parcelX - viewportCenterLong;
             var offsetFromCenterY = viewportHeight.Divide(2) - _parcelY + viewportCenterLat;
 
-            var offsetX = offsetFromCenterX.GetAsEightsS() / pixelToEightsRatioX;
-            var offsetY = offsetFromCenterY.GetAsEightsS() / pixelToEightsRatioY;
+            var offsetX = offsetFromCenterX.GetAsEightSeconds() / pixelToEightsRatioX;
+            var offsetY = offsetFromCenterY.GetAsEightSeconds() / pixelToEightsRatioY;
 
             var transformGroup = new System.Windows.Media.TransformGroup();
             transformGroup.Children.Add(new System.Windows.Media.ScaleTransform(1, -1));
@@ -116,30 +116,38 @@ namespace KWI.Viewer.MapRender
             }
         }
 
-        private Brush GetBgColor(int type)
+        private (Brush brush, Pen pen) GetBgColor(int type)
         {
             switch (type)
             {
                 case 0://green land
-                    return Brushes.LightYellow;
+                    return (Brushes.DarkOrange, Pens.DarkOrange);
                 case 3://linear water system
                 case 1: //water system
-                    return Brushes.LightBlue;
+                    return (Brushes.LightBlue, Pens.LightBlue);
                 case 2: //island
-                    return Brushes.LightCoral;
+                    return (Brushes.LightCoral, Pens.LightCoral);
                 case 4: //countour
-                    return Brushes.LightGray;
+                    return (Brushes.LightGray, Pens.LightGray);
                 case 5: //administrative field
                 case 6: //site field
-                    return Brushes.Azure;
+                    return (Brushes.DarkGray, Pens.DarkGray);
+                case 7:
+                case 8:
+                case 9:
+                    return (Brushes.Black, Pens.Black);
+                case 16:
+                    return (new SolidBrush(Color.FromArgb(100, 0, 0, 0)), Pens.LightBlue);
                 default:
-                    return Brushes.Black;
+                    return (Brushes.Black, Pens.LightBlue);
             }
         }
 
-        private void ExtractShapes(ParcelRecord parcel, out List<Tuple<Brush, Point[]>> backgrounds)
+
+        private void ExtractShapes(ParcelRecord parcel, out List<Tuple<Brush, Point[]>> backgrounds, out List<Tuple<Pen, Point[]>> backgroundLines)
         {
             backgrounds = new List<Tuple<Brush, Point[]>>();
+            backgroundLines = new List<Tuple<Pen, Point[]>>();
             var backgroundFrame = parcel.Childs.OfType<BackgroundFrameRecord>().FirstOrDefault();
             if (backgroundFrame != null)
             {
@@ -149,28 +157,38 @@ namespace KWI.Viewer.MapRender
                     foreach (var bgUnit in bgElementInfo.Childs.OfType<BackgroundUnit>())
                     {
                         bgUnit.LoadChilds();
-                        if (bgUnit.Type == Format.Typing.Graphics.ShapeType.Area)
+
+                        foreach (var area in bgUnit.Childs.OfType<MinimunGraphicsDataRecord>())
                         {
-                            var areas = parcel.IsPartOfIntegrated ?
-                                bgUnit.Childs.OfType<MinimunGraphicsDataRecord>().Where(r => r.IntegratedX == _integratedOffsetX && r.IntegratedY == _integratedOffsetY) :
-                                bgUnit.Childs.OfType<MinimunGraphicsDataRecord>();
-                            foreach (var area in areas)
+                            int nominator = 1;
+                            if (area.MultConst > 1)
+                                nominator = (int)Math.Pow(2, area.MultConst);
+                            var x = area.StartX;
+                            var y = area.StartY;
+                            if (parcel.IsPartOfIntegrated)
                             {
-                                if (area.MultConst > 1)
-                                    Debug.WriteLine($"Mult const {area.MultConst}");
-                                var x = area.StartX;
-                                var y = area.StartY;
-                                var points = new List<Point> { new Point(x, y) };
-                                bool penUp = false;
-                                foreach (var offset in area.Offsets)
-                                {
-                                    if (offset.X == 0 && offset.Y == 0)
-                                        Debug.WriteLine("Detected pen up");
-                                    x = x + offset.X;
-                                    y = y + offset.Y;
-                                    points.Add(new Point(x, y));
-                                }
-                                backgrounds.Add(new Tuple<Brush, Point[]>(GetBgColor(bgElementInfo.DisplayType), points.ToArray()));
+                                x += (area.IntegratedX - _integratedOffsetX) * 4096;
+                                y += (area.IntegratedY - _integratedOffsetY) * 4096;
+                            }
+                            var points = new List<Point> { new Point(x, y) };
+                            bool penUp = false;
+                            foreach (var offset in area.Offsets)
+                            {
+                                if (offset.X == 0 && offset.Y == 0)
+                                    break;
+                                x = x + offset.X / nominator;
+                                y = y + offset.Y / nominator;
+                                points.Add(new Point(x, y));
+                            }
+                            if (bgUnit.Type == Format.Typing.Graphics.ShapeType.Line)
+                            {
+                                if (points.Any(p => (p.X >= 0 && p.X <= 4096) || (p.Y >= 0 && p.Y <= 4096)))
+                                    backgroundLines.Add(new Tuple<Pen, Point[]>(GetBgColor(bgElementInfo.DisplayType).pen, points.ToArray()));
+                            }
+                            if (bgUnit.Type == Format.Typing.Graphics.ShapeType.Area)
+                            {
+                                if (points.Any(p => (p.X >= 0 && p.X <= 4096) || (p.Y >= 0 && p.Y <= 4096)))
+                                    backgrounds.Add(new Tuple<Brush, Point[]>(GetBgColor(bgElementInfo.DisplayType).brush, points.ToArray()));
                             }
                         }
                     }
@@ -180,18 +198,21 @@ namespace KWI.Viewer.MapRender
         private BitmapImage RenderToImage()
         {
             List<Tuple<Brush, Point[]>> backgroundAreas = null;
+            List<Tuple<Pen, Point[]>> backgroundLines = null;
             if (!_parcel.DividedWrapper)
             {
-                ExtractShapes(_parcel, out backgroundAreas);
+                ExtractShapes(_parcel, out backgroundAreas, out backgroundLines);
             }
             else
             {
                 backgroundAreas = new List<Tuple<Brush, Point[]>>();
+                backgroundLines = new List<Tuple<Pen, Point[]>>();
                 var parcelInformation = _parcel.Childs.OfType<ParcelInformationRecord>().FirstOrDefault();
                 foreach (var dividedParcel in parcelInformation.Childs.OfType<ParcelRecord>())
                 {
-                    ExtractShapes(dividedParcel, out List<Tuple<Brush, Point[]>> backgrounds);
+                    ExtractShapes(dividedParcel, out List<Tuple<Brush, Point[]>> backgrounds, out List<Tuple<Pen, Point[]>> lines);
                     backgroundAreas.AddRange(backgrounds);
+                    backgroundLines.AddRange(lines);
                 }
             }
 
@@ -207,12 +228,18 @@ namespace KWI.Viewer.MapRender
                         var point = bgArea.Item2;
                         g.FillPolygon(brush, point.Select(p => new PointF((p.X) * ratio, (p.Y) * ratio)).ToArray(), System.Drawing.Drawing2D.FillMode.Winding);
                     }
+                    foreach (var bgLine in backgroundLines)
+                    {
+                        var pen = bgLine.Item1;
+                        var point = bgLine.Item2;
+                        g.DrawLines(pen, point.Select(p => new PointF((p.X) * ratio, (p.Y) * ratio)).ToArray());
+                    }
                     if (!_parcel.IsPartOfIntegrated)
                     {
                         g.DrawRectangle(Pens.Green, 0, 0, _parcelScreenSize - 1, _parcelScreenSize - 1);
                         if (_parcel.DividedWrapper)
                         {
-                            
+
                         }
                     }
                     else

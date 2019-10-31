@@ -13,20 +13,19 @@ namespace KWI.Format.Structure
     public class ManagementHeaderRecord<T> : BinarySerializable, INode where T : FrameBase, new()
     {
         private readonly List<FieldBase> _fields = new List<FieldBase>();
-        private readonly T _frame = new T() { DriveLetter = 'J' };
 
         public long Offset { get; private set; }
-        public string Name => _frame.Name;
+        public string Name => Frame.Name;
 
-        public bool HasChilds => _frame.HasChilds;
+        public bool HasChilds => Frame.HasChilds;
 
-        public ObservableCollection<INode> Childs => _frame.Childs;
+        public ObservableCollection<INode> Childs => Frame.Childs;
 
-        public ObservableCollection<FieldBase> Fields => _frame.Fields;
+        public ObservableCollection<FieldBase> Fields => Frame.Fields;
 
         public bool Hidden => false;
 
-        public T Frame => _frame;
+        public T Frame { get; } = new T() { };
 
         public override void Read(BinaryReader br, int length = 0)
         {
@@ -38,20 +37,20 @@ namespace KWI.Format.Structure
             var fileName = new Field<C>("Management File Name", 12);
             fileName.Read(br);
 
-            _frame.Fields.Add(dsa);
-            _frame.Fields.Add(size);
-            _frame.Fields.Add(fileName);
+            Frame.Fields.Add(dsa);
+            Frame.Fields.Add(size);
+            Frame.Fields.Add(fileName);
 
             var file = fileName.Value.Str;
 
             if (string.IsNullOrEmpty(file))
                 file = "ALLDATA.KWI";
 
-            using (var stream = File.OpenRead($"J:\\{file}"))
+            using (var stream = File.OpenRead($"{KWIContext.DriveLetter}:\\{file}"))
             using (var reader = new BinaryReader(stream))
             {
                 stream.Position = dsa.Value.ComputedAddress;
-                _frame.Read(reader);
+                Frame.Read(reader);
             }
         }
     }

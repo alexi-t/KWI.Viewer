@@ -4,72 +4,65 @@ using System.Text;
 
 namespace KWI.Format.Typing.Base
 {
-    public class GeoCord
+    public struct GeoCord
     {
-        private readonly double _eights = 0;
-        private int _sign;
+        private readonly int _seconds;
+        private readonly short _eights;
+        private readonly bool _negative;
 
-        public GeoCord(int degree, int minute, double second, int sign = 1)
+        public GeoCord(int degree, int minute, double seconds, int sign = 1)
         {
-            Degree = degree;
-            if (Degree < 0)
+            if (degree < 0)
                 throw new ArgumentException("Set sign in constructor parameter");
             if (minute < 0 || minute > 60)
                 throw new ArgumentException($"Minute out of range: {minute}");
-            Minute = minute;
+            
+            if (seconds < 0 || seconds > 60)
+                throw new ArgumentException($"Second out of range: {seconds}");
 
-            if (second < 0 || second > 60)
-                throw new ArgumentException($"Second out of range: {second}");
-            Second = second;
-
-            _sign = Math.Sign(sign) < 0 ? -1 : 1;
-
-            _eights = _sign * (Degree * 3600 + Minute * 60 + Second) * 8;
+            var secondsInt = (int)Math.Floor(seconds);
+            _seconds = sign * (degree * 3600 + minute * 60 + secondsInt);
+            _eights = (short)(sign * (seconds - secondsInt) / 0.125);
+            _negative = sign < 0;
+            _cached = string.Empty;
         }
 
-        private GeoCord(double eights)
+        public GeoCord(double seconds)
         {
-
+            _seconds = (int)Math.Floor(seconds);
+            _eights = (short)((seconds - _seconds) / 0.125);
+            _negative = seconds < 0;
+            _cached = string.Empty;
         }
 
-        public int Degree { get; }
-        public int Minute { get; }
-        public double Second { get; }
-
+        private string _cached;
         public override string ToString()
         {
-            return $"{(_sign < 0 ? "-" : "")}{Degree}⁰ {Minute}' {Second}''";
+            if (!string.IsNullOrEmpty(_cached))
+                return _cached;
+            var degree = _seconds / 3600;
+            var minute = _seconds % 3600 / 60;
+            var second = _seconds % 3600 % 60;
+            return _cached = $"{(_negative ? "-" : "")}{degree}⁰ {minute}' {second}.{Math.Abs(_eights) * 0.125}''";
         }
 
-        public double GetAsEightsS() => _eights;
+        public double GetAsEightSeconds() => _seconds * 8 + _eights;
 
-        public static GeoCord FromEights(double eights)
-        {
-            var mod = eights % 8;
-            if (mod > 0 && eights > 1)
-                eights += mod;
-            var seconds = Math.Abs(eights / 8);
-            var degrees = (int)(seconds / 3600);
-            var minutes = (int)((seconds - degrees * 3600) / 60);
-            var remainder = seconds - minutes * 60 - degrees * 3600;
-            return new GeoCord(degrees, minutes, remainder, Math.Sign(eights));
-        }
+        public static GeoCord operator -(GeoCord left, GeoCord right) => new GeoCord(left._seconds + 0.125 * left._eights - (right._seconds + 0.125 * right._eights));
+        public static GeoCord operator +(GeoCord left, GeoCord right) => new GeoCord(left._seconds + 0.125 * left._eights + right._seconds + 0.125 * right._eights);
+        public static bool operator >(GeoCord left, GeoCord right) => left._seconds > right._seconds;
+        public static bool operator <(GeoCord left, GeoCord right) => left._seconds < right._seconds;
 
         public GeoCord Divide(int nominator)
         {
-            var divided = _eights / nominator;
-            return FromEights(divided);
+            var divided = (_seconds + (_negative ? -_eights : _eights) * 0.125) / nominator;
+            return new GeoCord(divided);
         }
-
-        public static GeoCord operator -(GeoCord left, GeoCord right) => FromEights(left._eights - right._eights);
-        public static GeoCord operator +(GeoCord left, GeoCord right) => FromEights(left._eights + right._eights);
-        public static bool operator >(GeoCord left, GeoCord right) => left._eights > right._eights;
-        public static bool operator <(GeoCord left, GeoCord right) => left._eights < right._eights;
 
         public GeoCord Multiply(int amount)
         {
-            var multiplied = _eights * amount;
-            return FromEights(multiplied);
+            var multiplied = (_seconds + (_negative ? -_eights : _eights) * 0.125) * amount;
+            return new GeoCord(multiplied);
         }
     }
 }

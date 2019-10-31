@@ -38,7 +38,7 @@ namespace KWI.Viewer
 
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            _reader = new DVDReader("J");
+            _reader = new DVDReader();
             _rootNode = _reader.Read();
             AssetTree.ItemsSource = new INode[] { _rootNode };
             var allData = _rootNode as AllDataFrame;

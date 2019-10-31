@@ -49,9 +49,9 @@ namespace KWI.Format.Structure
 
         private string GetScaleName(uint value)
         {
-            if (value % 100_000 < 100_000)
+            if (value > 100_000)
                 return $"1:{value / 100_000} km";
-            if (value % 100 == 0)
+            else
                 return $"1:{value / 100} m";
             return $"1:{value} cm";
         }

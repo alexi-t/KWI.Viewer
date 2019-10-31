@@ -1,5 +1,6 @@
 ﻿using KWI.Format.Structure.BackgroundFrame;
 using KWI.Format.Structure.Base;
+using KWI.Format.Structure.RoadsFrame;
 using KWI.Format.Typing;
 using KWI.Format.Typing.Base;
 using KWI.Format.Typing.Parcel;
@@ -159,6 +160,11 @@ namespace KWI.Format.Structure
                 {
                     br.BaseStream.Position = _mapDataFrameAddress + backgroundDataFrame.Displacement.DValue;
                     AddRecord(new BackgroundFrameRecord(_frame), br);
+                }
+                if (!roadsDataFrame.Size.IsNull && roadsDataFrame.Size.SWSValue > 0)
+                {
+                    br.BaseStream.Position = _mapDataFrameAddress + roadsDataFrame.Displacement.DValue;
+                    AddRecord(new RoadsFrameRecord(_frame), br);
                 }
             };
         }

@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Windows;
@@ -62,11 +63,11 @@ namespace KWI.Viewer.MapRender
 
         private void ComputeViewPort()
         {
-            var pixelToEightsRatioX = _parcelSizeLong.GetAsEightsS() / CurrentScale.ParcelSize;
-            var pixelToEightsRatioY = _parcelSizeLat.GetAsEightsS() / CurrentScale.ParcelSize;
+            var pixelToEightsRatioX = _parcelSizeLong.GetAsEightSeconds() / CurrentScale.ParcelSize;
+            var pixelToEightsRatioY = _parcelSizeLat.GetAsEightSeconds() / CurrentScale.ParcelSize;
 
-            _viewportHeight = GeoCord.FromEights(pixelToEightsRatioY * _canvas.ActualHeight);
-            _viewportWidth = GeoCord.FromEights(pixelToEightsRatioX * _canvas.ActualWidth);
+            _viewportHeight = new GeoCord(pixelToEightsRatioY * _canvas.ActualHeight / 8);
+            _viewportWidth = new GeoCord(pixelToEightsRatioX * _canvas.ActualWidth / 8);
         }
 
         private GeoCord _currentLat;
@@ -90,8 +91,8 @@ namespace KWI.Viewer.MapRender
             }
         }
 
-        public string CurrentLongStr => CurrentLong?.ToString();
-        public string CurrentLatStr => CurrentLat?.ToString();
+        public string CurrentLongStr => CurrentLong.ToString();
+        public string CurrentLatStr => CurrentLat.ToString();
 
         public ObservableCollection<Scale> Scales { get; } = new ObservableCollection<Scale>();
 
@@ -129,7 +130,7 @@ namespace KWI.Viewer.MapRender
             var index = Scales.IndexOf(CurrentScale);
             if (index > 0 && sign < 0)
                 CurrentScale = Scales[index - 1];
-            if (index < Scales.Count && sign > 0)
+            if (index < Scales.Count - 1 && sign > 0)
                 CurrentScale = Scales[index + 1];
         }
 
@@ -144,11 +145,11 @@ namespace KWI.Viewer.MapRender
                     var offsetX = _prevMousePoint.Value.X - pos.X;
                     var offsetY = pos.Y - _prevMousePoint.Value.Y;
 
-                    var pixelToEightsRatioX = _parcelSizeLong.GetAsEightsS() / CurrentScale.ParcelSize;
-                    var pixelToEightsRatioY = _parcelSizeLat.GetAsEightsS() / CurrentScale.ParcelSize;
+                    var pixelToEightsRatioX = _parcelSizeLong.GetAsEightSeconds() / CurrentScale.ParcelSize;
+                    var pixelToEightsRatioY = _parcelSizeLat.GetAsEightSeconds() / CurrentScale.ParcelSize;
 
-                    CurrentLong = CurrentLong + GeoCord.FromEights(offsetX * pixelToEightsRatioX);
-                    CurrentLat = CurrentLat + GeoCord.FromEights(offsetY * pixelToEightsRatioY);
+                    CurrentLong = CurrentLong + new GeoCord(offsetX * pixelToEightsRatioX / 8);
+                    CurrentLat = CurrentLat + new GeoCord(offsetY * pixelToEightsRatioY / 8);
 
                     Render();
                 }
@@ -224,12 +225,18 @@ namespace KWI.Viewer.MapRender
                 && right < viewRight
                 && top < viewTop
                 && bottom > viewBottom
+                )
+                || (
+                    left < viewLeft
+                && right > viewRight
+                && top > viewTop
+                && bottom < viewBottom
                 );
         }
 
         public void Render()
         {
-            if (CurrentLong == null || CurrentLat == null || _canvas.ActualWidth == 0 || _canvas.ActualHeight == 0)
+            if (_canvas.ActualWidth == 0 || _canvas.ActualHeight == 0)
                 return;
 
             var leftEdge = CurrentLong - _viewportWidth.Divide(2);
@@ -250,75 +257,54 @@ namespace KWI.Viewer.MapRender
                 bsLongPointer = longPointer;
                 for (int bsX = 0; bsX < _currentLevel.BlockSetsCountLong; bsX++)
                 {
+                    var bsLeft = bsLongPointer;
+                    var bsBottom = bsLatPointer;
+                    var bsRight = bsLeft + _bsSizeLong;
+                    var bsTop = bsBottom + _bsSizeLat;
+
                     GeoCord bLongPointer = bsLongPointer;
                     GeoCord bLatPonter = bsLatPointer;
-                    for (int bY = 0; bY < _currentLevel.BlocksCountLat; bY++)
-                    {
-                        bLongPointer = bsLongPointer;
-                        for (int bX = 0; bX < _currentLevel.BlocksCountLong; bX++)
+
+                    if (SquareInView(bsTop, bsLeft, bsBottom, bsRight, topEdge, leftEdge, bottomEdge, rightEdge))
+                        for (int bY = 0; bY < _currentLevel.BlocksCountLat; bY++)
                         {
-                            GeoCord pLongPointer = bLongPointer;
-                            GeoCord pLatPointer = bLatPonter;
-                            for (int pY = 0; pY < _currentLevel.ParcelsCountLat; pY++)
+                            bLongPointer = bsLongPointer;
+                            for (int bX = 0; bX < _currentLevel.BlocksCountLong; bX++)
                             {
-                                pLongPointer = bLongPointer;
-                                for (int pX = 0; pX < _currentLevel.ParcelsCountLong; pX++)
-                                {
-                                    var parcelLeft = pLongPointer;
-                                    var parcelRight = pLongPointer + _parcelSizeLong;
-                                    var parcelBottom = pLatPointer;
-                                    var parcelTop = pLatPointer + _parcelSizeLat;
+                                GeoCord pLongPointer = bLongPointer;
+                                GeoCord pLatPointer = bLatPonter;
 
-                                    if (
-                                        (
-                                           (parcelRight > leftEdge && parcelLeft < leftEdge)
-                                        || (parcelLeft < rightEdge && parcelRight > rightEdge)
-                                        )
-                                     && (
-                                           (parcelBottom < topEdge && parcelTop > topEdge)
-                                        || (parcelTop > bottomEdge && parcelBottom < bottomEdge)
-                                        )
-                                     || (
-                                        (
-                                           (parcelRight > leftEdge && parcelLeft < leftEdge)
-                                        || (parcelLeft < rightEdge && parcelRight > rightEdge)
-                                        )
-                                        &&
-                                        (
-                                            parcelBottom > bottomEdge && parcelTop < topEdge
-                                        )
-                                     )
-                                     || (
-                                        (
-                                           (parcelBottom < topEdge && parcelTop > topEdge)
-                                        || (parcelTop > bottomEdge && parcelBottom < bottomEdge)
-                                        )
-                                        &&
-                                        (
-                                            parcelLeft > leftEdge && parcelRight < rightEdge
-                                        )
-                                     )
-                                     || (
-                                           parcelLeft > leftEdge
-                                        && parcelRight < rightEdge
-                                        && parcelTop < topEdge
-                                        && parcelBottom > bottomEdge
-                                        )
-                                       )
-                                        parcelPointers.Add(new Tuple<int, int, int>(
-                                            bsY * _currentLevel.BlockSetsCountLong + bsX,
-                                            bY * _currentLevel.BlocksCountLong + bX,
-                                            pY * _currentLevel.ParcelsCountLong + pX));
+                                var bLeft = bLongPointer;
+                                var bRight = bLongPointer + _bSizeLong;
+                                var bBottom = bLatPonter;
+                                var bTop = bLatPonter + _bSizeLat;
 
-                                    pLongPointer += _parcelSizeLong;
-                                }
-                                pLatPointer += _parcelSizeLat;
+                                if (SquareInView(bTop, bLeft, bBottom, bRight, topEdge, leftEdge, bottomEdge, rightEdge))
+                                    for (int pY = 0; pY < _currentLevel.ParcelsCountLat; pY++)
+                                    {
+                                        pLongPointer = bLongPointer;
+                                        for (int pX = 0; pX < _currentLevel.ParcelsCountLong; pX++)
+                                        {
+                                            var parcelLeft = pLongPointer;
+                                            var parcelRight = pLongPointer + _parcelSizeLong;
+                                            var parcelBottom = pLatPointer;
+                                            var parcelTop = pLatPointer + _parcelSizeLat;
+
+                                            if (SquareInView(parcelTop, parcelLeft, parcelBottom, parcelRight, topEdge, leftEdge, bottomEdge, rightEdge))
+                                                parcelPointers.Add(new Tuple<int, int, int>(
+                                                    bsY * _currentLevel.BlockSetsCountLong + bsX,
+                                                    bY * _currentLevel.BlocksCountLong + bX,
+                                                    pY * _currentLevel.ParcelsCountLong + pX));
+
+                                            pLongPointer += _parcelSizeLong;
+                                        }
+                                        pLatPointer += _parcelSizeLat;
+                                    }
+
+                                bLongPointer += _bSizeLong;
                             }
-
-                            bLongPointer += _bSizeLong;
+                            bLatPonter += _bSizeLat;
                         }
-                        bLatPonter += _bSizeLat;
-                    }
                     bsLongPointer += _bsSizeLong;
                 }
                 bsLatPointer += _bsSizeLat;
@@ -337,16 +323,24 @@ namespace KWI.Viewer.MapRender
                 ParcelShape shape = null;
                 if (!parcels.ContainsKey(pointer))
                 {
-                    var blockSetIndex = pointer.Item1;
-                    var blockIndex = pointer.Item2;
-                    var parcelIndex = pointer.Item3;
-                    var blockSet = _currentLevel.Childs.OfType<BlockSetRecord>().FirstOrDefault(b => b.Index == blockSetIndex) ?? throw new ApplicationException($"Blockset {blockSetIndex} not found");
-                    var block = blockSet.Childs.OfType<BlockRecord>().FirstOrDefault(b => b.Index == blockIndex) ?? throw new ApplicationException($"Block {blockIndex} not found");
-                    var parcelManagement = block.Childs.OfType<ParcelInformationRecord>().FirstOrDefault() ?? throw new ApplicationException($"No parcel info in block {blockIndex}");
-                    parcelManagement.LoadChilds();
-                    var parcel = parcelManagement.Childs.OfType<ParcelRecord>().FirstOrDefault(p => p.Index == parcelIndex) ?? throw new ApplicationException($"Parcel {parcelIndex} not found");
-                    shape = new ParcelShape(parcel, CurrentScale.ParcelSize, _parcelSizeLong, _parcelSizeLat, parcelIndex);
-                    parcels.Add(pointer, shape);
+                    try
+                    {
+                        var blockSetIndex = pointer.Item1;
+                        var blockIndex = pointer.Item2;
+                        var parcelIndex = pointer.Item3;
+                        var blockSet = _currentLevel.Childs.OfType<BlockSetRecord>().FirstOrDefault(b => b.Index == blockSetIndex) ?? throw new ApplicationException($"Blockset {blockSetIndex} not found");
+                        var block = blockSet.Childs.OfType<BlockRecord>().FirstOrDefault(b => b.Index == blockIndex) ?? throw new ApplicationException($"Block {blockIndex} not found");
+                        var parcelManagement = block.Childs.OfType<ParcelInformationRecord>().FirstOrDefault() ?? throw new ApplicationException($"No parcel info in block {blockIndex}");
+                        parcelManagement.LoadChilds();
+                        var parcel = parcelManagement.Childs.OfType<ParcelRecord>().FirstOrDefault(p => p.Index == parcelIndex) ?? throw new ApplicationException($"Parcel {parcelIndex} not found");
+                        shape = new ParcelShape(parcel, CurrentScale.ParcelSize, _parcelSizeLong, _parcelSizeLat, parcelIndex);
+                        parcels.Add(pointer, shape);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Error ensure parcel {pointer}, {ex.Message}");
+                        continue;
+                    }
                 }
                 else
                     shape = parcels[pointer];
